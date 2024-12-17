@@ -1,0 +1,276 @@
+# Online Python - IDE, Editor, Compiler, Interpreter
+def sum(a, b):
+    return (a + b)
+
+a = int(input('Enter 1st number: '))
+b = int(input('Enter 2nd number: '))
+
+print(f'Sum of {a} and {b} is {sum(a, b)}')
+import cv2
+import pyttsx3
+import speech_recognition as sr
+import mediapipe as mp
+from ev3dev2.motor import MediumMotor, OUTPUT_A, OUTPUT_B
+from time import sleep
+from datetime import datetime
+import threading
+
+# Initialize EV3 motors (A for eyes, B for mouth)
+eyes_motor = MediumMotor(OUTPUT_A)
+mouth_motor = MediumMotor(OUTPUT_B)
+
+# Initialize Text-to-Speech
+tts_engine = pyttsx3.init()
+
+# Initialize Speech Recognition
+recognizer = sr.Recognizer()
+
+# Initialize Mediapipe for Body Movement Detection
+mp_pose = mp.solutions.pose
+pose = mp_pose.Pose()
+
+# Facial recognition using OpenCV
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+
+# Robot control functions
+def move_eyes_to_position(x):
+    """Move eyes based on X-coordinate."""
+    if x < 150:
+        eyes_motor.on_to_position(50, -45)  # Look left
+    elif x > 450:
+        eyes_motor.on_to_position(50, 45)   # Look right
+    else:
+        eyes_motor.on_to_position(50, 0)    # Look center
+
+def move_eyes_up():
+    """Move eyes up."""
+    eyes_motor.on_to_position(50, -90)  # Look up
+
+def move_eyes_down():
+    """Move eyes down."""
+    eyes_motor.on_to_position(50, 90)   # Look down
+
+def smile():
+    """Simulate smiling."""
+    mouth_motor.on_to_position(50, 30)  # Open mouth slightly for smile
+
+def frown():
+    """Simulate frowning."""
+    mouth_motor.on_to_position(50, 10)  # Close mouth slightly for frown
+
+def talk():
+    """Simulate talking."""
+    mouth_motor.on_to_position(50, 45)  # Open mouth
+    sleep(0.2)
+    mouth_motor.on_to_position(50, 0)   # Close mouth
+    sleep(0.2)
+
+def speak(message):
+    """Speak a message out loud and simulate mouth and eye movement."""
+    words = message.split()
+    for word in words:
+        tts_engine.say(word)
+        tts_engine.runAndWait()
+        
+        # Eye movement based on words
+        if "hello" in word.lower():
+            move_eyes_up()  # Look up when greeting
+        elif "goodbye" in word.lower():
+            move_eyes_down()  # Look down when saying goodbye
+        elif "left" in word.lower():
+            eyes_motor.on_to_position(50, -45)  # Look left
+        elif "right" in word.lower():
+            eyes_motor.on_to_position(50, 45)   # Look right
+        elif "up" in word.lower():
+            move_eyes_up()  # Look up for "up" word
+        elif "down" in word.lower():
+            move_eyes_down()  # Look down for "down" word
+        
+        # Simulate mouth moving as the robot talks
+        mouth_motor.on_to_position(50, 45)  # Open mouth
+        sleep(0.2)  # Short pause to simulate talking
+        mouth_motor.on_to_position(50, 0)   # Close mouth
+        sleep(0.2)  # Pause between words
+
+    print(f"Arnold: {message}")
+
+# Add additional functions for new vocabulary and responses
+
+def tell_time():
+    """Tell the current time."""
+    now = datetime.now()
+    current_time = now.strftime("%H:%M")
+    speak(f"The current time is {current_time}")
+
+def tell_joke():
+    """Tell a joke."""
+    joke = "Why don't skeletons fight each other? They don't have the guts!"
+    speak(joke)
+
+def tell_fact():
+    """Tell a random fact."""
+    fact = "Did you know? The longest recorded flight of a chicken is 13 seconds."
+    speak(fact)
+
+def respond_to_name():
+    """Respond when asked for the robot's name."""
+    speak("I am Arnold, your friendly robot, designed to assist and entertain!")
+
+def respond_to_how_are_you():
+    """Respond to the question 'How are you?'."""
+    speak("I'm doing great, thanks for asking! How about you?")
+
+def tell_weather():
+    """Tell a generic weather fact."""
+    speak("The weather is always perfect here in the digital world!")
+
+def answer_question(question):
+    """Answer a simple question."""
+    if "your name" in question.lower():
+        respond_to_name()
+    elif "how are you" in question.lower():
+        respond_to_how_are_you()
+    elif "weather" in question.lower():
+        tell_weather()
+    elif "what is the time" in question.lower():
+        tell_time()
+    elif "tell me a joke" in question.lower():
+        tell_joke()
+    elif "tell me a fact" in question.lower():
+        tell_fact()
+    else:
+        speak("I don't have an answer to that. Try asking me something else!")
+
+# Detect faces and track them
+def detect_and_follow_face(frame):
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+    
+    if len(faces) > 0:
+        # Take the first detected face (closest to the camera)
+        (x, y, w, h) = max(faces, key=lambda item: item[2]*item[3])  # Choose the largest face
+        move_eyes_to_position(x + w // 2)
+        return True
+    return False
+
+# Detect and interpret body movement using MediaPipe Pose
+def detect_body_movement(frame):
+    """Detect body movements using Mediapipe Pose."""
+    results = pose.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+
+    if results.pose_landmarks:
+        landmarks = results.pose_landmarks.landmark
+
+        # Example 1: Detect if both hands are raised above the head (Waving)
+        left_wrist = landmarks[mp_pose.PoseLandmark.LEFT_WRIST]
+        right_wrist = landmarks[mp_pose.PoseLandmark.RIGHT_WRIST]
+        left_shoulder = landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER]
+        right_shoulder = landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER]
+
+        # Check if both hands are raised above the head (Wave gesture)
+        if left_wrist.y < left_shoulder.y and right_wrist.y < right_shoulder.y:
+            return "hands raised"
+        
+        # Example 2: Detect if one arm is extended (Pointing)
+        left_elbow = landmarks[mp_pose.PoseLandmark.LEFT_ELBOW]
+        right_elbow = landmarks[mp_pose.PoseLandmark.RIGHT_ELBOW]
+
+        if left_elbow.x > left_shoulder.x and right_elbow.x < right_shoulder.x:
+            return "pointing left"
+        elif right_elbow.x > right_shoulder.x and left_elbow.x < left_shoulder.x:
+            return "pointing right"
+        
+        # Example 3: Detect if the head is shaking (Shaking Head)
+        left_eye = landmarks[mp_pose.PoseLandmark.LEFT_EYE]
+        right_eye = landmarks[mp_pose.PoseLandmark.RIGHT_EYE]
+        nose = landmarks[mp_pose.PoseLandmark.NOSE]
+
+        if abs(left_eye.x - right_eye.x) > 0.05 and abs(nose.x - (left_eye.x + right_eye.x) / 2) > 0.05:
+            return "shaking head"
+        
+        # Example 4: Detect if the user is bending down (Bending Down)
+        left_hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP]
+        right_hip = landmarks[mp_pose.PoseLandmark.RIGHT_HIP]
+        left_shoulder = landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER]
+        right_shoulder = landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER]
+
+        if left_hip.y > left_shoulder.y and right_hip.y > right_shoulder.y:
+            return "bending down"
+
+        # Example 5: Detect if the user is crossing their arms (Crossing Arms)
+        left_elbow = landmarks[mp_pose.PoseLandmark.LEFT_ELBOW]
+        right_elbow = landmarks[mp_pose.PoseLandmark.RIGHT_ELBOW]
+        left_shoulder = landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER]
+        right_shoulder = landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER]
+
+        if (left_shoulder.x > right_shoulder.x and left_elbow.x < left_shoulder.x) or \
+           (right_shoulder.x > left_shoulder.x and right_elbow.x < right_shoulder.x):
+            return "crossing arms"
+
+    return None
+
+# Speech recognition
+def listen():
+    with sr.Microphone() as source:
+        print("Listening...")
+        try:
+            audio = recognizer.listen(source, timeout=5)
+            return recognizer.recognize_google(audio)
+        except sr.UnknownValueError:
+            speak("Sorry, I did not catch that.")
+        except sr.RequestError as e:
+            speak("Sorry, there seems to be an issue with the speech service.")
+            print(f"Error: {e}")
+        return ""
+
+# Main loop for robot interaction
+def listen_thread():
+    while True:
+        command = listen()
+        if command:
+            print(f"User said: {command}")
+            answer_question(command)
+
+def main():
+    cap = cv2.VideoCapture(0)  # Start webcam
+    # Start the listening thread
+    listen_thread = threading.Thread(target=listen_thread)
+    listen_thread.daemon = True
+    listen_thread.start()
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            print("Failed to grab frame")
+            break
+
+        # Detect and follow faces
+        detect_and_follow_face(frame)
+
+        # Detect body movements
+        movement = detect_body_movement(frame)
+        if movement:
+            print(f"Detected body movement: {movement}")
+            if movement == "hands raised":
+                speak("Hello! I see you're waving.")
+            elif movement == "pointing left":
+                speak("You're pointing left!")
+            elif movement == "shaking head":
+                speak("Are you shaking your head?")
+            elif movement == "bending down":
+                speak("You're bending down.")
+            elif movement == "crossing arms":
+                speak("Are you crossing your arms?")
+
+        # Show the frame (optional for debugging)
+        cv2.imshow("Frame", frame)
+
+        # Exit on 'q' key press
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    main()
